@@ -3514,10 +3514,21 @@ class GatewayRunner:
         
         # One-time prompt if no home channel is set for this platform
         # Skip for webhooks - they deliver directly to configured targets (github_comment, etc.)
-        if not history and source.platform and source.platform != Platform.LOCAL and source.platform != Platform.WEBHOOK:
+        # Set HERMES_SUPPRESS_HOME_CHANNEL_NUDGE=1 to disable this hint (e.g. if you never use cron/cross-platform delivery).
+        _suppress_home_nudge = os.getenv("HERMES_SUPPRESS_HOME_CHANNEL_NUDGE", "").lower() in (
+            "1", "true", "yes", "on",
+        )
+        if (
+            not _suppress_home_nudge
+            and not history
+            and source.platform
+            and source.platform != Platform.LOCAL
+            and source.platform != Platform.WEBHOOK
+        ):
             platform_name = source.platform.value
             env_key = f"{platform_name.upper()}_HOME_CHANNEL"
-            if not os.getenv(env_key):
+            has_home = bool(os.getenv(env_key)) or bool(self.config.get_home_channel(source.platform))
+            if not has_home:
                 adapter = self.adapters.get(source.platform)
                 if adapter:
                     await adapter.send(

@@ -1466,6 +1466,13 @@ OPTIONAL_ENV_VARS = {
         "password": True,
         "category": "messaging",
     },
+    "HERMES_SUPPRESS_HOME_CHANNEL_NUDGE": {
+        "description": "If true, gateway will not send the one-time “set home channel” hint on messaging platforms (cron/cross-platform delivery still needs a home set elsewhere to target a chat).",
+        "prompt": "Suppress home-channel onboarding hint",
+        "url": None,
+        "password": False,
+        "category": "messaging",
+    },
 
     # ── Agent settings ──
     "MESSAGING_CWD": {
