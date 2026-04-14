@@ -67,6 +67,7 @@ class Platform(Enum):
     WEIXIN = "weixin"
     BLUEBUBBLES = "bluebubbles"
     QQBOT = "qqbot"
+    ONEBOT = "onebot"
 
 
 @dataclass
@@ -306,6 +307,9 @@ class GatewayConfig:
                 connected.append(platform)
             # QQBot uses extra dict for app credentials
             elif platform == Platform.QQBOT and config.extra.get("app_id") and config.extra.get("client_secret"):
+                connected.append(platform)
+            # OneBot (NapCat / OneBot v11) uses WebSocket URL in extra
+            elif platform == Platform.ONEBOT and config.extra.get("ws_url"):
                 connected.append(platform)
         return connected
     
@@ -1036,6 +1040,30 @@ def _apply_env_overrides(config: GatewayConfig) -> None:
                 chat_id=wecom_home,
                 name=os.getenv("WECOM_HOME_CHANNEL_NAME", "Home"),
             )
+
+    # OneBot (QQ / NapCat)
+    onebot_ws_url = os.getenv("ONEBOT_WS_URL")
+    if onebot_ws_url:
+        if Platform.ONEBOT not in config.platforms:
+            config.platforms[Platform.ONEBOT] = PlatformConfig()
+        config.platforms[Platform.ONEBOT].enabled = True
+        config.platforms[Platform.ONEBOT].extra["ws_url"] = onebot_ws_url
+
+    onebot_access_token = os.getenv("ONEBOT_ACCESS_TOKEN", "")
+    if onebot_access_token and Platform.ONEBOT in config.platforms:
+        config.platforms[Platform.ONEBOT].extra["access_token"] = onebot_access_token
+
+    onebot_bot_id = os.getenv("ONEBOT_BOT_ID", "")
+    if onebot_bot_id and Platform.ONEBOT in config.platforms:
+        config.platforms[Platform.ONEBOT].extra["bot_id"] = onebot_bot_id
+
+    onebot_home = os.getenv("ONEBOT_HOME_CHANNEL")
+    if onebot_home and Platform.ONEBOT in config.platforms:
+        config.platforms[Platform.ONEBOT].home_channel = HomeChannel(
+            platform=Platform.ONEBOT,
+            chat_id=onebot_home,
+            name=os.getenv("ONEBOT_HOME_CHANNEL_NAME", "Home"),
+        )
 
     # WeCom callback mode (self-built apps)
     wecom_callback_corp_id = os.getenv("WECOM_CALLBACK_CORP_ID")
