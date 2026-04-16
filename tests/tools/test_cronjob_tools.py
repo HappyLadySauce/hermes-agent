@@ -9,6 +9,7 @@ from tools.cronjob_tools import (
     check_cronjob_requirements,
     cronjob,
 )
+from cron.jobs import get_job, update_job
 
 
 # =========================================================================
@@ -231,3 +232,28 @@ class TestUnifiedCronjobTool:
         assert updated["success"] is True
         assert updated["job"]["skills"] == []
         assert updated["job"]["skill"] is None
+
+    def test_run_schedule_only_hides_last_results(self):
+        created = json.loads(
+            cronjob(action="create", prompt="Check", schedule="every 1h", name="Run Test")
+        )
+        job_id = created["job_id"]
+
+        # Simulate an earlier delivery failure.
+        assert get_job(job_id) is not None
+        update_job(
+            job_id,
+            {"last_status": "error", "last_delivery_error": "delivery error: stale"},
+        )
+        assert get_job(job_id)["last_status"] == "error"
+        assert get_job(job_id)["last_delivery_error"] == "delivery error: stale"
+
+        run_resp = json.loads(cronjob(action="run", job_id=job_id))
+        assert run_resp["success"] is True
+
+        assert run_resp["execution"]["status"] == "scheduled"
+        assert run_resp["execution"]["will_execute_at"]
+
+        # IMPORTANT: run/trigger is schedule-only; do not leak stale last_*.
+        assert run_resp["job"]["last_status"] is None
+        assert run_resp["job"]["last_delivery_error"] is None

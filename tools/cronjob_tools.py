@@ -187,7 +187,7 @@ def _validate_cron_script_path(script: Optional[str]) -> Optional[str]:
     return None
 
 
-def _format_job(job: Dict[str, Any]) -> Dict[str, Any]:
+def _format_job(job: Dict[str, Any], *, include_last_results: bool = True) -> Dict[str, Any]:
     prompt = job.get("prompt", "")
     skills = _canonical_skills(job.get("skill"), job.get("skills"))
     result = {
@@ -204,8 +204,12 @@ def _format_job(job: Dict[str, Any]) -> Dict[str, Any]:
         "deliver": job.get("deliver", "local"),
         "next_run_at": job.get("next_run_at"),
         "last_run_at": job.get("last_run_at"),
-        "last_status": job.get("last_status"),
-        "last_delivery_error": job.get("last_delivery_error"),
+        # NOTE:
+        # For action in {"run","run_now","trigger"} this tool is "schedule-only",
+        # so returning stale last_* delivery info would mislead the model.
+        # We therefore hide last_* unless include_last_results=True.
+        "last_status": job.get("last_status") if include_last_results else None,
+        "last_delivery_error": job.get("last_delivery_error") if include_last_results else None,
         "enabled": job.get("enabled", True),
         "state": job.get("state", "scheduled" if job.get("enabled", True) else "paused"),
         "paused_at": job.get("paused_at"),
@@ -328,7 +332,18 @@ def cronjob(
 
         if normalized in {"run", "run_now", "trigger"}:
             updated = trigger_job(job_id)
-            return json.dumps({"success": True, "job": _format_job(updated)}, indent=2)
+            return json.dumps(
+                {
+                    "success": True,
+                    "execution": {
+                        # This tool only schedules/marks the job for the next tick.
+                        "status": "scheduled",
+                        "will_execute_at": updated.get("next_run_at"),
+                    },
+                    "job": _format_job(updated, include_last_results=False),
+                },
+                indent=2,
+            )
 
         if normalized == "update":
             updates: Dict[str, Any] = {}
@@ -394,6 +409,8 @@ Use action='update', 'pause', 'resume', 'remove', or 'run' to manage an existing
 Jobs run in a fresh session with no current-chat context, so prompts must be self-contained.
 If skills are provided on create, the future cron run loads those skills in order, then follows the prompt as the task instruction.
 On update, passing skills=[] clears attached skills.
+For action='run'/'run_now'/'trigger': this tool is schedule-only. It updates `next_run_at` so the job will execute on the next scheduler tick, but it does NOT guarantee immediate execution. The tool response therefore hides stale `last_status`/`last_delivery_error` and instead includes an `execution` field with `status='scheduled'` and `will_execute_at`.
+Models must not treat hidden `last_*` fields as the result of the current tool call.
 
 NOTE: The agent's final response is auto-delivered to the target. Put the primary
 user-facing content in the final response. Cron jobs run autonomously with no user
